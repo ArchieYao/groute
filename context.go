@@ -1,4 +1,4 @@
-package base
+package groute
 
 import (
 	"encoding/json"
@@ -13,21 +13,38 @@ import (
 type H map[string]interface{}
 
 type Context struct {
-	Writer     http.ResponseWriter
-	Req        *http.Request
-	Path       string
-	Method     string
-	Params     map[string]string
-	StatusCode int
+	Writer       http.ResponseWriter
+	Req          *http.Request
+	Path         string
+	Method       string
+	Params       map[string]string
+	StatusCode   int
+	handlers     []HandleFunc // plugins
+	pluginIdx    int          // plugin index
+	handleEngine *HandleEngine
 }
 
 func newContext(w http.ResponseWriter, r *http.Request) *Context {
-	return &Context{Writer: w, Req: r, Path: r.URL.Path, Method: r.Method, Params: map[string]string{}}
+	return &Context{
+		Writer: w,
+		Req:    r,
+		Path:   r.URL.Path,
+		Method: r.Method,
+		//Params:    map[string]string{},
+		pluginIdx: -1,
+	}
+}
+
+func (c *Context) Next() {
+	c.pluginIdx++
+	s := len(c.handlers)
+	for ; c.pluginIdx < s; c.pluginIdx++ {
+		c.handlers[c.pluginIdx](c)
+	}
 }
 
 func (c *Context) Param(key string) string {
-	value, _ := c.Params[key]
-	return value
+	return c.Params[key]
 }
 
 func (c *Context) PostForm(key string) string {
@@ -67,4 +84,12 @@ func (c *Context) HTML(code int, html string) {
 	c.SetHeader("Content-Type", "text/html")
 	c.Status(code)
 	c.Writer.Write([]byte(html))
+}
+
+func (c *Context) FailString(format string, values ...interface{}) {
+	c.String(http.StatusForbidden, format, values...)
+}
+
+func (c *Context) FailWithCustomCode(code int, obj interface{}) {
+	c.JSON(code, obj)
 }

@@ -1,13 +1,22 @@
-package base
+package groute
 
 import (
+	"fmt"
 	"log"
+	"net/http"
 	"strings"
 )
 
 // author: ArchieYao
 // date: 2021/7/8 9:12 下午
 // description:
+
+const (
+	GET    = "GET"
+	POST   = "POST"
+	PUT    = "PUT"
+	DELETE = "DELETE"
+)
 
 type router struct {
 	roots        map[string]*node
@@ -16,6 +25,7 @@ type router struct {
 
 type HandleFunc func(c *Context)
 
+// newRouter 添加一个新路由
 func newRouter() *router {
 	return &router{
 		roots:        make(map[string]*node),
@@ -23,6 +33,7 @@ func newRouter() *router {
 	}
 }
 
+// parsePattern 解析uri
 func parsePattern(pattern string) []string {
 	vs := strings.Split(pattern, "/")
 	parts := make([]string, 0)
@@ -37,6 +48,7 @@ func parsePattern(pattern string) []string {
 	return parts
 }
 
+// addRouter 添加一个路由
 func (r *router) addRouter(method string, pattern string, handler HandleFunc) {
 	parts := parsePattern(pattern)
 	key := method + "-" + pattern
@@ -48,6 +60,7 @@ func (r *router) addRouter(method string, pattern string, handler HandleFunc) {
 	r.handleFunMap[key] = handler
 }
 
+// getRoute 获取路由
 func (r *router) getRoute(method string, path string) (*node, map[string]string) {
 	searchParts := parsePattern(path)
 	params := make(map[string]string)
@@ -72,13 +85,19 @@ func (r *router) getRoute(method string, path string) (*node, map[string]string)
 	return nil, nil
 }
 
-func (r router) handle(c *Context) {
+// handle 执行每个路由的方法
+func (r *router) handle(c *Context) {
 	n, params := r.getRoute(c.Method, c.Path)
 	if n != nil {
-		c.Params = params
 		key := c.Method + "-" + n.pattern
-		r.handleFunMap[key](c)
+		c.Params = params
+		c.handlers = append(c.handlers, r.handleFunMap[key])
+		//r.handleFunMap[key](c)
 	} else {
-		log.Fatalln("404 ERROR, uri not found.")
+		c.handlers = append(c.handlers, func(c *Context) {
+			c.String(http.StatusNotFound, "404 NOT FOUND: %s \n", c.Path)
+		})
+		log.Println(fmt.Sprintf("404 ERROR, uri [%s] not found.", c.Req.RequestURI))
 	}
+	c.Next()
 }
